@@ -2,6 +2,7 @@
 
 ![Linkerd][logo]
 
+[![CNTi cert](https://github.com/linkerd/linkerd2/actions/workflows/cnti.yml/badge.svg)](https://github.com/linkerd/linkerd2/actions/workflows/cnti.yml)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4629/badge)](https://bestpractices.coreinfrastructure.org/projects/4629)
 [![GitHub Actions Status][github-actions-badge]][github-actions]
 [![GitHub license](https://img.shields.io/github/license/linkerd/linkerd2.svg)](LICENSE)

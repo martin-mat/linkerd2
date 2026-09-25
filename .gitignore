@@ -18,3 +18,4 @@ go-test.json
 package-lock.json
 .vscode
 **/coverage*
+ci/cnti/certs/

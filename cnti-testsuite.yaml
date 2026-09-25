@@ -1,0 +1,36 @@
+---
+# CNTi Test Suite configuration for the Linkerd control plane, from the edge
+# Helm repository: the Linkerd CRDs, then the control plane with identity
+# certificates the workflow generates. The Gateway API CRDs Linkerd expects
+# are a prerequisite, installed by the workflow before the suite runs.
+config_version: "v2"
+common:
+  container_names:
+    # Retained edge release tags used by the rolling update, downgrade and
+    # rollback tests; the chart's appVersion is the tag under test.
+    - name: identity
+      rolling_update_test_tag: "edge-26.9.2"
+      rolling_downgrade_test_tag: "edge-26.8.4"
+      rolling_version_change_test_tag: "edge-26.9.2"
+      rollback_from_tag: "edge-26.9.2"
+deployments:
+  helm_charts:
+    - name: linkerd-crds
+      helm_repo_name: linkerd-edge
+      helm_repo_url: https://helm.linkerd.io/edge
+      helm_chart_name: linkerd-crds
+      chart_version: 2026.9.3
+      namespace: linkerd
+      priority: 2
+    - name: linkerd-control-plane
+      helm_repo_name: linkerd-edge
+      helm_repo_url: https://helm.linkerd.io/edge
+      helm_chart_name: linkerd-control-plane
+      chart_version: 2026.9.3
+      namespace: linkerd
+      priority: 3
+      helm_values: >-
+        --values ci/cnti/values.yaml
+        --set-file identityTrustAnchorsPEM=ci/cnti/certs/ca.crt
+        --set-file identity.issuer.tls.crtPEM=ci/cnti/certs/issuer.crt
+        --set-file identity.issuer.tls.keyPEM=ci/cnti/certs/issuer.key

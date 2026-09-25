@@ -1,0 +1,60 @@
+name: CNTi cert
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cnti-cert
+  cancel-in-progress: false
+
+jobs:
+  cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # The control plane needs a trust anchor and an identity issuer
+      # certificate; a throwaway pair is generated for each run.
+      - name: Generate identity certificates
+        run: |
+          set -euo pipefail
+          d=ci/cnti/certs
+          mkdir -p "$d"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+            -keyout "$d/ca.key" -out "$d/ca.crt" -days 2 \
+            -subj "/CN=root.linkerd.cluster.local" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign"
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+            -keyout "$d/issuer.key" -out "$d/issuer.csr" \
+            -subj "/CN=identity.linkerd.cluster.local"
+          printf 'basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n' > "$d/issuer.ext"
+          openssl x509 -req -in "$d/issuer.csr" -CA "$d/ca.crt" -CAkey "$d/ca.key" \
+            -CAcreateserial -out "$d/issuer.crt" -days 2 -extfile "$d/issuer.ext"
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: cnti-testsuite
+          config: ci/cnti/kind.yaml
+
+      # A prerequisite, not part of Linkerd: the Gateway API CRDs it expects.
+      - name: Install the Gateway API CRDs
+        run: kubectl apply --server-side -f ci/cnti/gateway-api-crds/gateway-api.yaml
+
+      - uses: lfn-cnti/testsuite-action@v1
+        with:
+          # Pinned so a run is reproducible and a suite release is adopted on
+          # purpose; bump it after checking the release notes.
+          version: v2.1.0
+          cnf_config: cnti-testsuite.yaml
+          create_kind_cluster: false
+          log_level: info
+          install_timeout: 900
+          tests: cert
