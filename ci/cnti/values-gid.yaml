@@ -1,0 +1,4 @@
+# Only the proposed default change: a group id next to the chart's user ids.
+controllerGID: 2103
+proxy:
+  gid: 2102

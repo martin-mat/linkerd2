@@ -1,0 +1,60 @@
+# Fork-only: the CNTi essential tests on Linkerd's chart defaults, and with
+# only controllerGID and proxy.gid set, side by side.
+name: CNTi essential (defaults vs group ids)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [cnti-gid-defaults]
+
+permissions:
+  contents: read
+
+jobs:
+  essential:
+    name: ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [defaults, gid]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate identity certificates
+        run: |
+          set -euo pipefail
+          d=ci/cnti/certs
+          mkdir -p "$d"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+            -keyout "$d/ca.key" -out "$d/ca.crt" -days 2 \
+            -subj "/CN=root.linkerd.cluster.local" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign"
+          openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+            -keyout "$d/issuer.key" -out "$d/issuer.csr" \
+            -subj "/CN=identity.linkerd.cluster.local"
+          printf 'basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n' > "$d/issuer.ext"
+          openssl x509 -req -in "$d/issuer.csr" -CA "$d/ca.crt" -CAkey "$d/ca.key" \
+            -CAcreateserial -out "$d/issuer.crt" -days 2 -extfile "$d/issuer.ext"
+
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          cluster_name: cnti-testsuite
+          config: ci/cnti/kind.yaml
+
+      - name: Install the Gateway API CRDs
+        run: kubectl apply --server-side -f ci/cnti/gateway-api-crds/gateway-api.yaml
+
+      - uses: lfn-cnti/testsuite-action@70536fda55fcb11f4f7463175fe9d57c86b85574 # v1.2.0
+        with:
+          version: v2.2.0
+          cnf_config: ci/cnti/cnti-${{ matrix.variant }}.yaml
+          create_kind_cluster: "false"
+          install_timeout: 900
+          tests: cert
+          fail_on_failure: "false"
+          artifact_name: cnti-results-${{ matrix.variant }}
